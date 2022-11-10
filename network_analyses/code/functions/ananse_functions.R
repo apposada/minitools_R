@@ -1,7 +1,5 @@
 #' Functions ANANSE
 require(igraph)
-source("./basic_functions")
-source("./plot_functions")
 
 #' Load network
 LoadNetworkData <- function(x) {
@@ -47,7 +45,25 @@ FilterNetwork <- function(nw,q = 0.85) {
 }
 
 #' Generate network
-GenerateNetwork <- function(nw, q = 0.85) {
+GenerateUndirectedNetwork <- function(nw, q = 0.85) {
+  colnames(nw) <- c("gene1","gene2","value")
+  q_filt <- nw$value > quantile(nw$value, q)
+  ngenes <- length(
+    unique(
+      c(nw$gene1,nw$gene2)
+    )
+  )
+  nw_G <- graph.data.frame( # the initial igraph object
+    d = nw[q_filt,],
+    directed = F
+  )
+  E(nw_G)$width <- nw[q_filt,]$value
+  # output of function: a filtered network in the shape of an igraph object
+  return(nw_G)
+}
+
+GenerateDirectedNetwork <- function(nw, q = 0.85) {
+  colnames(nw) <- c("tf","target","prob")
   q_filt <- nw$prob > quantile(nw$prob, q)
   ngenes <- length(
     unique(
@@ -62,6 +78,17 @@ GenerateNetwork <- function(nw, q = 0.85) {
   # output of function: a filtered network in the shape of an igraph object
   return(nw_G)
 }
+
+GenerateNetwork <- function(nw, q = 0.85, directed = FALSE){
+  if(directed == FALSE ){
+    nw_G <- GenerateUndirectedNetwork(nw = nw, q = q)
+  } else {
+    nw_G <- GenerateDirectedNetwork(nw = nw, q = q)
+  }
+  return(nw_G)
+}
+
+
 
 #' Parse the network
 ParseNetwork <- function(
