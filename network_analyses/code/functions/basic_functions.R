@@ -81,6 +81,25 @@ divide_into_components <- function(x,CCs,impl="create_from_scratch") {
   return(lis)
 }
 
+#' Function to calculate the centrality of a given set of vertex based on
+#' category, iterated over a loop of networks (see divide_into_components)
+centrality_by_network <- function(list_grns){
+  l <- list()
+  for (i in 1:length(list_grns)){
+    g <- list_grns[[i]]
+    v <- V(g)$name[V(g)$TFclass != ""] #add ifelses or cases here depending on user
+    l[[i]] <- closeness(
+      g,
+      vids = v,
+      mode = c("all"),
+      weights = NULL,
+      normalized = F
+    )
+    names(l)[i] <- names(rev(sort(table(V(g)$module))))[1]
+  }
+  return(l)
+}
+
 #' Params
 #' @genelist must be a object of type list() containing an undetermined number of character vectors. Each component of the list is a char vector of gene names. This function will perform gene ontology enrichment using the char vector as test sample and the totality of your organism's genes as population (Universe). 
 #' @gene_universe is a vector of characters containing the genes you want to use as universe. This is normally the totality of genes in your species, or the totality of genes with recollected expression in your dataset.
