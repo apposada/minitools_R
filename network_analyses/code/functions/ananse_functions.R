@@ -17,17 +17,22 @@ LoadNetworkData <- function(x) {
 }
 
 #' Filter network
-FilterNetwork <- function(nw,q = 0.85) {
-  q_filt <- nw$prob > quantile(nw$prob, q)
+FilterNetwork <- function(nw, q = 0.85) { # we MUST FIND A WAY TO INTERCHANGE BOTH
+  # if( exists("q") == TRUE  & exists("value") == FALSE ){
+    filt <- nw[,3] > quantile(nw[,3], q)
+  # } else if (exists("q") == FALSE  & exists("value") == TRUE) {
+    # filt <- nw[,3] > value
+  # }
+  
   ngenes <- length(
     unique(
-      c(nw$tf,nw$tg)
+      c(nw[,1],nw[,2])
     )
   )
-  nw_filt <- nw[q_filt,]
+  nw_filt <- nw[filt,]
   ngenes_filt <- length(
     unique(
-      c(nw_filt$tf,nw_filt$tg)
+      c(nw_filt[,1],nw_filt[,2])
     )
   )
   print(
