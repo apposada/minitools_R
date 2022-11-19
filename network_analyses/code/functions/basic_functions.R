@@ -61,9 +61,6 @@ getcentral <- function(g, d, category, ...){ # a much, much quicker option would
 #' Function to divide a graph in smaller components and retrieve them in a list
 divide_into_components <- function(x,CCs,impl="create_from_scratch") {
   require(igraph)
-  x = graph
-  CCs = graph_components
-  impl="create_from_scratch"
   lis <- list()
   for( i in unique(CCs$member)) {
     print(i)
