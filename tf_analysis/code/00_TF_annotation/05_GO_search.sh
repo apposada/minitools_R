@@ -1,0 +1,3 @@
+# Run eggNOG using a database of choice, either swissprot or meNOG, or veNOG, ...
+
+# subset those with "transcription factor", the COGs related to regulation of gene expression, and/or the GO terms related to regulation of gene expression
