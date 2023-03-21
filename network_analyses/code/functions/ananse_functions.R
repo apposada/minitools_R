@@ -314,95 +314,41 @@ NetworkPlots <- function(stats, nw, tfcol, layout = TRUE, colpal = default_colpa
   par(mfrow=c(1,1))
 }
 
-
 #' Network Comparison
-compareNetworks <- function(nw_a,nw_b,graph_a,graph_b,
-                            influence = NULL, col_a = "green",
-                            col_b = "purple", geneset_interest = NULL, 
-                            top = 0.9, tfs, gene_universe, id2go){
+compareNetworks <- function(
+  nw_a,nw_b,graph_a,graph_b,stats_a,stats_b,
+  influence = NULL, name_network_a = "a", name_network_b = "b", col_a = "darkorange",
+  col_b = "purple", geneset_interest = NULL, 
+  top = 0.9, tfs, gene_universe, id2go
+){  # requires nw, graph, graph strong, InVsOut, stats
   
-  require(VennDiagram)
-
   #common_genes
   print("Defining exclusive and common targets")
+  
   a_top_tgt <- names(table(nw_a$tg)[table(nw_a$tg) >= quantile(table(nw_a$tg),top)])
   b_top_tgt <- names(table(nw_b$tg)[table(nw_b$tg) >= quantile(table(nw_b$tg),top)])
   
-  a_top_tgt_no_b <- a_top_tgt[!(a_top_tgt %in% b_top_tgt)]
-  b_top_tgt_no_a <- b_top_tgt[!(b_top_tgt %in% a_top_tgt)]
-  
   list_targets <- list(
-    targets_exclusive_a = a_top_tgt_no_b,
-    targets_exclusive_b = b_top_tgt_no_a,
+    targets_exclusive_a = a_top_tgt[!(a_top_tgt %in% b_top_tgt)],
+    targets_exclusive_b = b_top_tgt[!(b_top_tgt %in% a_top_tgt)],
     targets_common_ab = a_top_tgt[a_top_tgt %in% b_top_tgt]
   )
   
-  numtgts_exclusive_a <- length(a_top_tgt) - length(which(a_top_tgt %in% b_top_tgt))
-  numtgts_exclusive_b <- length(b_top_tgt) - length(which(a_top_tgt %in% b_top_tgt))
-  numtgts_common <- length(which(a_top_tgt %in% b_top_tgt))
-  
-  # plots
-  
-  boxplot(
-    list(
-      c(table(nw_a$tg)),
-      c(table(nw_b$tg))
-    ),
-    col=c(
-      'green',
-      'purple'
-    ),
-    main="connections per target gene",
-    xaxt="n"
-  )
-  axis(1,at=c(1,2),c("a","b"))
+  numtgts_exclusive_a <- length(list_targets[[1]])
+  numtgts_exclusive_b <- length(list_targets[[2]])
+  numtgts_common <- length(list_targets[[3]])
   
   venn <- venn.diagram(
     x = list(a_top_tgt, b_top_tgt),
-    category.names = c("A" , "B"),
+    category.names = c(name_network_a, name_network_b),
     filename = NULL,
     cex = 1,
     cat.cex = 1,
     lwd = 0.5,
-    fill=c("green", 'purple'),
-    
+    fill=c(col_a,col_b)
   )
-  plot(0,type="n", 
-       xlab = "",
-       ylab = "",
-       main = "Targets shared between networks",
-       axes = F
-  )
-  grid::grid.draw(venn)
   
-  # Genes of interest
-  
-  if ( is.null(geneset_interest) ) { 
-    print("Number of genes of interest in targets")
-    genes_interest_innetwork = c(
-      "A" = length(which(a_top_tgt_no_b %in% geneset_interest)),
-      "B" = length(which(b_top_tgt_no_a %in% geneset_interest))
-    )
-    barplot(
-      height=c(
-        genes_interest_innetwork[1]/length(a_top_tgt_no_b)*100,
-        genes_interest_innetwork[2]/length(b_top_tgt_no_a)*100
-      ),
-      col = c(
-        col_a,
-        col_b
-      ),
-      ylim=c(0,40),
-      main="Genes of interest\nin network",
-      names=c("a","b"),
-      ylab="gene percent",
-      las=1
-    )
-  } else {
-    genes_interest_innetwork = "No genes of interest provided."
-  }
-  
-  # GOs
+# GOs
   print("getting GO terms")
   GOs_targets <- getGOs(
     list_targets,
@@ -411,14 +357,64 @@ compareNetworks <- function(nw_a,nw_b,graph_a,graph_b,
     alg = "elim"
   )
   
+  # Putting data together
+  print("Dataframe of various metrics")
+  compare_df <- data.frame(
+    metric = c(
+      "Num Genes in Network",
+      "Num Active TFs",
+      "Mean Connections per TF",
+      "Num Self-Regulated TFs",
+      "Mean Connections per TG",
+      "Median Connections per TG",
+      "Mean Emitted Connections",
+      "Mean Received Connections",
+      "Number of common targets",
+      "Number of exclusive targets"
+    ),
+    a = c(
+      stats_a$numgenes_network,
+      stats_a$num_active_TFs,
+      stats_a$mean_connection_per_TF,
+      stats_a$num_selfregulated_TFs,
+      stats_a$mean_connection_per_TG,
+      median(stats_a$connection_per_TG),
+      mean(stats_a$In_Out_per_Gene$emit),
+      mean(stats_a$In_Out_per_Gene$recv),
+      numtgts_common,
+      numtgts_exclusive_a
+    ),
+b = c(
+      stats_b$numgenes_network,
+      stats_b$num_active_TFs,
+      stats_b$mean_connection_per_TF,
+      stats_b$num_selfregulated_TFs,
+      stats_b$mean_connection_per_TG,
+      median(stats_b$connection_per_TG),
+      mean(stats_b$In_Out_per_Gene$emit),
+      mean(stats_b$In_Out_per_Gene$recv),
+      numtgts_common,
+      numtgts_exclusive_b
+    )
+  )
+  
+  # merge InVsOut
+  print("Gene Behaviour across networks")
+  inout_ab <- merge(
+    stats_a$In_Out_per_Gene,
+    stats_b$In_Out_per_Gene,
+    by = 1,
+    all = TRUE
+  )
+  colnames(inout_ab) <- c("id","emit.a","recv.a","ratio.a","emit.b","recv.b","ratio.b")
   # centrality
-  print("gene centrality across networks")
+  print("Gene centrality of ALL common genes across networks")
   common_genes_in_nw <-
     V(graph_a)$name [
       V(graph_a)$name %in% V(graph_b)$name
     ]
   
-  centrality_per_network <- data.frame(
+ centrality_per_network <- data.frame(
     id = common_genes_in_nw,
     centrality_a = closeness(
       graph_a,
@@ -436,37 +432,385 @@ compareNetworks <- function(nw_a,nw_b,graph_a,graph_b,
     )
   )
   
-  plot(
-    centrality_per_network$centrality_a,
-    centrality_per_network$centrality_b
+  # merge tf central
+  print("Gene centrality of TFs across networks")
+  tfcntr_ab <- merge(
+    data.frame(
+      id = names(unlist(stats_a$Centrality_per_TFclass)),
+      a = unlist(stats_a$Centrality_per_TFclass)
+    ),
+    data.frame(
+      id = names(unlist(stats_b$Centrality_per_TFclass)),
+      b = unlist(stats_b$Centrality_per_TFclass)
+    ),
+    by = 1
+  )
+  tfcntr_ab$class <- sub("\\.TCONS..*","",tfcntr_ab$id)
+  tfcntr_ab$id <- sub("..*TCONS","TCONS",tfcntr_ab$id)
+  
+  # merge transdev central
+  print("Gene centrality of trans-dev genes across networks")
+  td_ab <- merge(
+    data.frame(
+      id = names(unlist(stats_a$Centrality_per_TransDev_HK$td)),
+      a = unlist(stats_a$Centrality_per_TransDev_HK$td)
+    ),
+    data.frame(
+      id = names(unlist(stats_b$Centrality_per_TransDev_HK$td)),
+      b = unlist(stats_b$Centrality_per_TransDev_HK$td)
+    ),
+    by = 1
   )
   
-  # Influence
-  if ( influence == TRUE ){
-    print("Influence")
-    influence_results <- influ_table(influence,tfs)
+  # Generate graph of TFs
+  print("Graph generation - TF genes")
+  graph_tf_a <- induced.subgraph(
+    graph_a,
+    vids = tfcntr_ab$id[
+      tfcntr_ab$b/tfcntr_ab$a < 
+        0.95
+    ],
+    impl = "create_from_scratch"
+  )
+  V(graph_tf_a)$size <- 
+    1 /
+    (tfcntr_ab$b/tfcntr_ab$a)[
+      match(
+        V(graph_tf_a)$name,
+        tfcntr_ab$id
+      )
+    ]
+  
+  graph_tf_b <- induced.subgraph(
+    graph_b,
+    vids = tfcntr_ab$id[
+      tfcntr_ab$b/tfcntr_ab$a > 
+        1
+    ],
+    impl = "create_from_scratch"
+  )
+V(graph_tf_b)$size <- 
+    (tfcntr_ab$b/tfcntr_ab$a)[
+      match(
+        V(graph_tf_b)$name,
+        tfcntr_ab$id
+      )
+    ]
+  
+  print("Graph generation - Trans-dev genes")
+  graph_td_a <- induced.subgraph(
+    graph_a,
+    vids = td_ab$id[td_ab$b/td_ab$a < 0.95 ],
+    impl = "create_from_scratch"
+  )
+  V(graph_td_a)$size <- 
+    1 /
+    (td_ab$b/td_ab$a)[
+      match(
+        V(graph_td_a)$name,
+        td_ab$id
+      )
+    ]
+  
+  graph_td_b <- induced.subgraph(
+    graph_b,
+    vids = td_ab$id[td_ab$b/td_ab$a > 1],
+    impl = "create_from_scratch"
+  )
+  V(graph_td_b)$size <- 
+    (td_ab$b/td_ab$a)[
+      match(
+        V(graph_td_b)$name,
+        td_ab$id
+      )
+    ]
+  
+  # plots
+print("Plots")
+  
+  print("Mean connections per TF gene")
+  barplot(
+    main = "Mean connections per TF gene",
+    height = c(compare_df[3,2],compare_df[3,2]),
+    names = c(name_network_a, name_network_b),
+    col = c(col_a, col_b)
+  )
+  
+  print("Number of self-regulating TFs")
+  barplot(
+    main = "Number of self-regulating TFs",
+    height = c(
+      stats_a$num_selfregulated_TFs,
+      stats_b$num_selfregulated_TFs),
+    names.arg = c(name_network_a, name_network_b),
+    col = c(col_a,col_b),
+    sub = paste0("Chi-Sq pval ", chisq.test( #check this
+      x = matrix(
+        c(
+          stats_a$num_selfregulated_TFs, 
+          stats_a$num_active_TFs - stats_a$num_selfregulated_TFs,
+          stats_b$num_selfregulated_TFs,
+          stats_b$num_active_TFs - stats_b$num_selfregulated_TFs
+        ),
+        nrow=2)
+    )$p.value)
+  )
+  
+  print("connections per target gene")
+  boxplot(
+    main = "connections per target gene",
+    list(
+      c(table(nw_a$tg)),
+      c(table(nw_b$tg))
+    ),
+names = c(name_network_a, name_network_b),
+    col = c(col_a,col_b),
+    sub = paste0(
+      "Wilcox p.value ",
+      wilcox.test(
+        x = c(table(nw_a$tg)),
+        y = c(table(nw_b$tg))
+      )$p.value
+    )
+  )
+  
+  # venn
+  print("Venn Diagram Plot")
+  plot(0,type="n", 
+       xlab = "",
+       ylab = "",
+       main = "Targets shared between networks",
+       axes = F
+  )
+  grid::grid.draw(venn)
+  
+# Genes of interest
+  
+  if ( is.null(geneset_interest) == FALSE ) { 
+    print("Number of genes of interest in targets")
+    genes_interest_innetwork = c(
+      name_network_a = length(which(a_top_tgt_no_b %in% geneset_interest)),
+      name_network_b = length(which(b_top_tgt_no_a %in% geneset_interest))
+    )
+    barplot(
+      main="Genes of interest\nin network",
+      height=c(
+        genes_interest_innetwork[1]/length(a_top_tgt_no_b)*100,
+        genes_interest_innetwork[2]/length(b_top_tgt_no_a)*100
+      ),
+      col = c(
+        col_a,
+        col_b
+      ),
+      names=c(name_network_a, name_network_b),
+      ylab="gene percent",
+      las=1
+    )
   } else {
-    influence = "no Influence provided."
+    genes_interest_innetwork = "No genes of interest provided."
   }
   
-  res = list(
-    top_targets_a = a_top_tgt,
-    top_targets_b = b_top_tgt,
-    targets_exclusive_a = a_top_tgt_no_b,
-    targets_exclusive_b = b_top_tgt_no_a,
-    connects_per_tgt_gene_a = table(nw_a$tg),
-    connects_per_tgt_gene_b = table(nw_b$tg),
-    numtgts_exclusive_a = numtgts_exclusive_a,
-    numtgts_exclusive_b = numtgts_exclusive_b,
-    numtgts_common = numtgts_common,
+#Gene behavior
+  print("Gene Behaviour plot")
+  plot(
+    main = "% emitted connections/gene across networks",
+    inout_ab$ratio.a,
+    inout_ab$ratio.b,
+    pch = 1,
+    col = alpha(col_a,0.4),
+    cex = 0.75,
+    xlab = name_network_a,
+    ylab = name_network_b
+  )
+  
+  print("Gene Behaviour Box plot")
+  boxplot(
+    x = list(
+      a = stats_a$In_Out_per_Gene$ratio[
+        stats_a$In_Out_per_Gene$ratio > 0
+      ],
+      b = stats_b$In_Out_per_Gene$ratio[
+        stats_b$In_Out_per_Gene$ratio > 0
+      ]
+    ),
+    col = c(col_a,col_b),
+    main = "gene behavior in networks",
+    sub = paste0(
+      "Wilcox p.value ",
+      wilcox.test(
+        x = stats_a$In_Out_per_Gene$ratio[
+          stats_a$In_Out_per_Gene$ratio > 0
+        ],
+        y = stats_b$In_Out_per_Gene$ratio[
+          stats_b$In_Out_per_Gene$ratio > 0
+        ]
+      )$p.value
+    )
+  )
+  
+ # Centrality changes
+  print("Changes in centrality for ALL genes")
+  plot(
+    main = "Changes in centrality across networks",
+    centrality_per_network$centrality_a,
+    centrality_per_network$centrality_b,
+    xlab="network a",
+    ylab = "network b",
+    pch = 19,
+    cex = 0.75,
+    col = alpha(col_a,0.25)
+  )
+  # text(names of genes in top 10-15 of either one or the other network)
+  
+# foldchange centrality of all tfs
+  print("Changes in centrality for TF genes")
+  plot(
+    main = "Changes in TF centrality across networks",
+    x = tfcntr_ab$a,
+    y = tfcntr_ab$b,
+    xlab="network a",
+    ylab = "network b",
+    pch = 19,
+    cex = 0.75,
+    col = alpha(col_a,0.25)
+  )
+  print("Foldchange in centrality of TFs")
+  plot(
+    main = "Foldchange in centrality of TFs",
+    sort(tfcntr_ab$b/tfcntr_ab$a) # highlight here where are the topcentrals of each network using dynamic labels or something similar
+  )
+  
+  print("graph plots of TFs that change")
+  par(mfrow = c(1,2))
+  plot(
+    main = paste0("TFs ",name_network_a),
+    graph_tf_a,
+    vertex.size = 5*V(graph_tf_a)$size,
+    vertex.color = col_a,
+    vertex.label.cex = 0.6,
+    edge.color = "gray",
+    edge.arrow.size = 0.2,
+    layout = layout_nicely(graph_tf_a)
+  )
+plot(
+    main = paste0("TFs ",name_network_b),
+    graph_tf_b,
+    vertex.color = col_b,
+    vertex.size = 5*V(graph_tf_b)$size,
+    vertex.label.cex = 0.6,
+    edge.color = "gray",
+    edge.arrow.size = 0.2,
+    layout = layout_nicely(graph_tf_b)
+  )
+  par(mfrow=c(1,1))
+  
+  # foldchange centrality of all transdevs
+  print("Changes in trans-dev centrality across networks")
+  plot(
+    main = "Changes in trans-dev centrality across networks",
+    x = td_ab$a,
+    y = td_ab$b,
+    xlab = name_network_a,
+    ylab = name_network_b,
+    pch = 19,
+    cex = 0.75,
+    col = alpha(col_a,0.25)
+  )
+  print("Foldchange % emitted connections per gene")
+  plot(
+    main = "Foldchange % emitted connections per gene",
+    sort(td_ab$b/td_ab$a), # highlight here where are the topcentrals of each network using dynamic labels or something similar
+    ylab = "Foldchange"
+  )
+  print("graph plots of trans-dev that change")
+  par(mfrow = c(1,2))
+  plot(
+    main = paste0("Trans-Devs ",name_network_a),
+    graph_td_a,
+    vertex.size = 5*V(graph_td_a)$size,
+    vertex.color = col_a,
+    vertex.label.cex = 0.6,
+    edge.color = "gray",
+    edge.arrow.size = 0.2,
+    layout = layout_nicely(graph_td_a)
+  )
+  plot(
+    main = paste0("Trans-Devs ",name_network_b),
+    graph_td_b,
+    vertex.color = col_b,
+    vertex.size = 5*V(graph_td_b)$size,
+    vertex.label.cex = 0.6,
+    edge.color = "gray",
+    edge.arrow.size = 0.2,
+    layout = layout_nicely(graph_td_b)
+  )
+  par(mfrow=c(1,1))
+  
+ #Influence
+  if ( is.null(influence) == FALSE ){
+    print("Influence")
+    
+    influence_results <- influ_table(influence,tfs)
+    
+    print("Influence graph")
+    influence_graph <- induced.subgraph(
+      graph_b,
+      vids = influence_results$factor,
+      impl = "create_from_scratch"
+    )
+    
+    V(influence_graph)$size <- 
+      influence_results$factor_fc[
+        match(V(influence_graph)$name, influence_results$factor)
+      ]
+    V(influence_graph)$color[
+      V(influence_graph)$color == ""
+    ] <- "gray"
+    
+    E(influence_graph)$weight <- E(influence_graph)$width
+    E(influence_graph)$weight <-
+      (E(influence_graph)$weight - min(E(influence_graph)$weight)) / 
+      (max(E(influence_graph)$weight) - min(E(influence_graph)$weight))
+    
+    E(influence_graph)$width <- 2*E(influence_graph)$weight
+    E(influence_graph)$color <- alpha("#2c2c2c",0.5*E(influence_graph)$weight)
+    
+    print("Plot influence graph")
+    plot(
+      main = "Influence network",
+      influence_graph,
+      vertex.label = NA,
+      edge.arrow.size = 0.2,
+      layout = layout_nicely(influence_graph)
+    )
+  } else {
+    influence_results = "no Influence provided."
+    influence_graph = "no Influence provided."
+  }
+res = list(
+    comparison_table = compare_df,
+    target_genes = list_targets,
+    connections_per_tgt_gene = list(
+      connects_per_tgt_gene_a = table(nw_a$tg),
+      connects_per_tgt_gene_b = table(nw_b$tg)
+    ),
+    emit_recv_connections = inout_ab,
+    tf_centrality_across_networks = tfcntr_ab,
+    transdev_centrality_across_networks = td_ab,
+    graph_tfs_a = graph_tf_a,
+    graph_tfs_b = graph_tf_b,
+    graph_transdevs_a = graph_td_a,
+    graph_transdevs_b = graph_td_b,
     genes_interest_innetwork,
     GOs_targets = GOs_targets,
     centrality_per_network = centrality_per_network,
-    influence_results = influence_results
+    influence_results = influence_results,
+    influence_graph = influence_graph
   )
   
   return(res)
 }
+
 
 # 3. funcion para plotear la centrality de los TFs over time (fuzz/broadlines depicting quantile or median or whatever)
 

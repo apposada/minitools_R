@@ -93,5 +93,4 @@ sample1_vs_sample2 <- compareNetworks(
 
 ananse_sample1_comparedto_sample2 <- 
   read.table("/path/to/ananse/influence.txt",header=T)
-ananse_sample1_comparedto_sample2$factor)
 ananse_sample1_comparedto_sample2 <- influ_table(ananse_sample1_comparedto_sample2,spp1_TFs)
